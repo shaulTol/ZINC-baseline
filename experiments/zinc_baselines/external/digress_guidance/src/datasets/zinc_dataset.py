@@ -231,6 +231,7 @@ class ZINCinfos(AbstractDatasetInfos):
     """Dataset info for ZINC."""
     
     def __init__(self, datamodule, cfg):
+        self.remove_h = cfg.dataset.remove_h
         self.name = 'zinc'
         self.n_nodes = datamodule.node_counts()
         self.node_types = datamodule.node_types()
@@ -242,6 +243,8 @@ class ZINCinfos(AbstractDatasetInfos):
         self.atom_decoder = ['C', 'N', 'O', 'F', 'S', 'Cl', 'Br', 'I', 'P']
         self.num_atom_types = len(self.atom_decoder)
         self.valencies = [4, 3, 2, 1, 2, 1, 1, 1, 3]  # Typical valencies
+        self.atom_weights = {0: 12, 1: 14, 2: 16, 3: 19, 4: 32, 5: 35, 6: 80, 7: 127, 8: 31}
+        self.max_weight = int(self.max_n_nodes * max(self.atom_weights.values()))
         
         # Property info
         self.property_names = ['qed', 'logp', 'num_atoms']
