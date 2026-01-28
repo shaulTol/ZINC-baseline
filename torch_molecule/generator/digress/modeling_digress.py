@@ -1,3 +1,5 @@
+import os
+import datetime
 import numpy as np
 from tqdm import tqdm
 from typing import Optional, Union, Dict, Any, Tuple, List, Type
@@ -276,7 +278,121 @@ class DigressMolecularGenerator(BaseMolecularGenerator):
 
         return optimizer, scheduler
 
-    def fit(self, X_train: List[str]) -> "DigressMolecularGenerator":
+    def save_training_checkpoint(
+        self,
+        path: str,
+        epoch: int,
+        optimizer: torch.optim.Optimizer,
+        scheduler: Optional[Any] = None,
+    ) -> None:
+        """Save a training checkpoint that can be used to resume training.
+        
+        Parameters
+        ----------
+        path : str
+            File path to save the checkpoint
+        epoch : int
+            Current epoch number
+        optimizer : torch.optim.Optimizer
+            Optimizer instance
+        scheduler : Optional[Any]
+            Learning rate scheduler instance (if used)
+        """
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        
+        checkpoint = {
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict() if scheduler is not None else None,
+            "epoch": epoch,
+            "fitting_loss": self.fitting_loss,
+            "hyperparameters": self.get_params(),
+            "date_saved": datetime.datetime.now().isoformat(),
+            "is_training_checkpoint": True,
+        }
+        torch.save(checkpoint, path)
+        if self.verbose != "none":
+            print(f"Training checkpoint saved to {path} at epoch {epoch + 1}")
+
+    def load_training_checkpoint(
+        self,
+        path: str,
+        optimizer: torch.optim.Optimizer,
+        scheduler: Optional[Any] = None,
+    ) -> int:
+        """Load a training checkpoint to resume training.
+        
+        Parameters
+        ----------
+        path : str
+            File path to load the checkpoint from
+        optimizer : torch.optim.Optimizer
+            Optimizer instance to load state into
+        scheduler : Optional[Any]
+            Learning rate scheduler instance to load state into (if used)
+            
+        Returns
+        -------
+        int
+            The epoch to resume from (next epoch after the saved one)
+        """
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"No checkpoint found at '{path}'")
+        
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+        
+        if not checkpoint.get("is_training_checkpoint", False):
+            raise ValueError(
+                "The checkpoint is not a training checkpoint. "
+                "Use load_from_local() for inference checkpoints."
+            )
+        
+        # Load model state
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        
+        # Load optimizer state
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        
+        # Load scheduler state if available
+        if scheduler is not None and checkpoint.get("scheduler_state_dict") is not None:
+            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        
+        # Restore fitting history
+        self.fitting_loss = checkpoint.get("fitting_loss", [])
+        
+        resume_epoch = checkpoint["epoch"] + 1
+        if self.verbose != "none":
+            print(f"Resumed training from checkpoint at epoch {checkpoint['epoch'] + 1}")
+            print(f"Will continue from epoch {resume_epoch + 1}")
+        
+        return resume_epoch
+
+    def fit(
+        self, 
+        X_train: List[str],
+        checkpoint_dir: Optional[str] = None,
+        checkpoint_freq: int = 100,
+        resume_from: Optional[str] = None,
+    ) -> "DigressMolecularGenerator":
+        """Fit the DiGress model on training data.
+        
+        Parameters
+        ----------
+        X_train : List[str]
+            List of SMILES strings for training
+        checkpoint_dir : Optional[str], default=None
+            Directory to save training checkpoints. If None, no checkpoints are saved.
+        checkpoint_freq : int, default=100
+            Save a checkpoint every N epochs (only used if checkpoint_dir is set)
+        resume_from : Optional[str], default=None
+            Path to a training checkpoint to resume from. If provided, training
+            continues from the saved epoch.
+            
+        Returns
+        -------
+        DigressMolecularGenerator
+            The fitted model instance
+        """
         num_task = 0 if self.input_dim_y is None else self.input_dim_y
         X_train, _ = self._validate_inputs(X_train, num_task=num_task, return_rdkit_mol=False)
         self._setup_diffusion_params(X_train)
@@ -284,6 +400,12 @@ class DigressMolecularGenerator(BaseMolecularGenerator):
         self.model.initialize_parameters()
 
         optimizer, scheduler = self._setup_optimizers()
+        
+        # Handle checkpoint resumption
+        start_epoch = 0
+        if resume_from is not None:
+            start_epoch = self.load_training_checkpoint(resume_from, optimizer, scheduler)
+        
         train_dataset = self._convert_to_pytorch_data(X_train)
         train_loader = DataLoader(
             train_dataset,
@@ -294,7 +416,8 @@ class DigressMolecularGenerator(BaseMolecularGenerator):
 
         # Calculate total steps for global progress bar
         steps_per_epoch = len(train_loader)
-        total_steps = self.epochs * steps_per_epoch
+        remaining_epochs = self.epochs - start_epoch
+        total_steps = remaining_epochs * steps_per_epoch
         
         # Initialize global progress bar
         global_pbar = None
@@ -307,11 +430,16 @@ class DigressMolecularGenerator(BaseMolecularGenerator):
                 leave=True
             )
 
-        self.fitting_loss = []
-        self.fitting_epoch = 0
+        if resume_from is None:
+            self.fitting_loss = []
+        self.fitting_epoch = start_epoch
+        
+        # Setup checkpoint directory
+        if checkpoint_dir is not None:
+            os.makedirs(checkpoint_dir, exist_ok=True)
         
         try:
-            for epoch in range(self.epochs):
+            for epoch in range(start_epoch, self.epochs):
                 train_losses = self._train_epoch(train_loader, optimizer, epoch, global_pbar)
                 epoch_loss = np.mean(train_losses).item()
                 self.fitting_loss.append(epoch_loss)
@@ -328,6 +456,13 @@ class DigressMolecularGenerator(BaseMolecularGenerator):
                     global_pbar.set_postfix(log_dict)
                 elif self.verbose == "print_statement":
                     print(log_dict)
+                
+                # Save checkpoint
+                if checkpoint_dir is not None and (epoch + 1) % checkpoint_freq == 0:
+                    checkpoint_path = os.path.join(
+                        checkpoint_dir, f"checkpoint_epoch_{epoch + 1}.pt"
+                    )
+                    self.save_training_checkpoint(checkpoint_path, epoch, optimizer, scheduler)
 
             self.fitting_epoch = epoch
         finally:

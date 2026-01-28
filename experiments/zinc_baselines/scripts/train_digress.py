@@ -29,7 +29,8 @@ def load_data(tranche: str, data_dir: Path) -> dict:
         return pickle.load(f)
 
 
-def train_unconditional(data: dict, output_dir: Path, **kwargs):
+def train_unconditional(data: dict, output_dir: Path, checkpoint_dir: Path = None, 
+                        checkpoint_freq: int = 100, resume_from: str = None, **kwargs):
     """Train DiGress for unconditional generation."""
     
     print(f"\nInitializing DiGress for unconditional generation...")
@@ -38,6 +39,11 @@ def train_unconditional(data: dict, output_dir: Path, **kwargs):
     print(f"  num_layer: {kwargs.get('num_layer', 12)}")
     print(f"  epochs: {kwargs.get('epochs', 2000)}")
     print(f"  batch_size: {kwargs.get('batch_size', 16)}")
+    if checkpoint_dir:
+        print(f"  checkpoint_dir: {checkpoint_dir}")
+        print(f"  checkpoint_freq: {checkpoint_freq}")
+    if resume_from:
+        print(f"  resume_from: {resume_from}")
     
     model = DigressMolecularGenerator(
         # Model architecture (matched to GRASSY-DiT for fair comparison)
@@ -64,8 +70,13 @@ def train_unconditional(data: dict, output_dir: Path, **kwargs):
     
     print(f"\nStarting training on {len(data['X_train'])} molecules...")
     
-    # DiGress fit() only takes X_train (no y_train)
-    model.fit(X_train=data["X_train"])
+    # DiGress fit() with checkpoint support
+    model.fit(
+        X_train=data["X_train"],
+        checkpoint_dir=str(checkpoint_dir) if checkpoint_dir else None,
+        checkpoint_freq=checkpoint_freq,
+        resume_from=resume_from,
+    )
     
     # Save model
     checkpoint_path = output_dir / f"digress_{data['tranche']}_unconditional.pt"
@@ -84,7 +95,7 @@ def main():
                         help="Directory containing prepared data")
     parser.add_argument("--output_dir", type=str,
                         default="experiments/zinc_baselines/checkpoints",
-                        help="Directory to save checkpoints")
+                        help="Directory to save final checkpoints")
     # Model hyperparameters (matched to GRASSY-DiT for fair comparison)
     parser.add_argument("--hidden_size_X", type=int, default=256,
                         help="Hidden dimension for node features")
@@ -102,6 +113,13 @@ def main():
                         help="Loss weight for node reconstruction")
     parser.add_argument("--lw_E", type=float, default=5.0,
                         help="Loss weight for edge reconstruction")
+    # Checkpoint options
+    parser.add_argument("--checkpoint_dir", type=str, default=None,
+                        help="Directory to save intermediate training checkpoints (optional)")
+    parser.add_argument("--checkpoint_freq", type=int, default=100,
+                        help="Save checkpoint every N epochs (default: 100)")
+    parser.add_argument("--resume_from", type=str, default=None,
+                        help="Path to training checkpoint to resume from (optional)")
     
     args = parser.parse_args()
     
@@ -142,7 +160,21 @@ def main():
         "lw_E": args.lw_E,
     }
     
-    train_unconditional(data, output_dir, **kwargs)
+    # Handle checkpoint directory
+    checkpoint_dir = None
+    if args.checkpoint_dir is not None:
+        if not Path(args.checkpoint_dir).is_absolute():
+            checkpoint_dir = PROJECT_ROOT / args.checkpoint_dir
+        else:
+            checkpoint_dir = Path(args.checkpoint_dir)
+    
+    train_unconditional(
+        data, output_dir, 
+        checkpoint_dir=checkpoint_dir,
+        checkpoint_freq=args.checkpoint_freq,
+        resume_from=args.resume_from,
+        **kwargs
+    )
     
     print(f"\n{'='*60}")
     print("Training complete!")

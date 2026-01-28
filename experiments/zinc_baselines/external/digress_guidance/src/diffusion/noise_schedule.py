@@ -59,11 +59,12 @@ class PredefinedNoiseScheduleDiscrete(torch.nn.Module):
 
         self.register_buffer('betas', torch.from_numpy(betas).float())
 
-        self.alphas = 1 - torch.clamp(self.betas, min=0, max=0.9999)
+        alphas = 1 - torch.clamp(self.betas, min=0, max=0.9999)
+        self.register_buffer('alphas', alphas)
 
         log_alpha = torch.log(self.alphas)
         log_alpha_bar = torch.cumsum(log_alpha, dim=0)
-        self.alphas_bar = torch.exp(log_alpha_bar)
+        self.register_buffer('alphas_bar', torch.exp(log_alpha_bar))
         # print(f"[Noise schedule: {noise_schedule}] alpha_bar:", self.alphas_bar)
 
     def forward(self, t_normalized=None, t_int=None):

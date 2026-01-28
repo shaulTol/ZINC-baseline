@@ -96,8 +96,44 @@ experiments/zinc_baselines/
 └── README.md
 ```
 
+## DiGress with Property Guidance (External)
+
+For conditional generation with DiGress, we use the external guidance branch which trains a separate property regressor.
+
+### Setup
+```bash
+cd experiments/zinc_baselines/external/digress_guidance
+pip install -e .
+```
+
+### Step 1: Train Property Regressor
+```bash
+cd experiments/zinc_baselines/external/digress_guidance
+python -m src.guidance.train_zinc_regressor experiment=zinc_regressor dataset.tranche=BBAB
+```
+
+### Step 2: Train Unconditional DiGress
+Use the standard DiGress training (from torch-molecule or original DiGress).
+
+### Step 3: Guided Sampling
+```bash
+python -m src.guidance.main_zinc_guidance experiment=zinc_guidance \
+    general.guidance_target=qed \
+    general.trained_regressor_path=checkpoints/zinc_regressor/last.ckpt \
+    general.test_only=checkpoints/zinc_unconditional/last.ckpt
+```
+
+### Guidance Targets
+- `qed` - Quantitative Estimate of Drug-likeness
+- `logp` - Partition Coefficient (MolLogP)
+- `num_atoms` - Number of Heavy Atoms
+- `all` - All 3 properties simultaneously
+
+---
+
 ## Notes
 
-- **DiGress**: Only supports unconditional generation in torch-molecule
+- **DiGress (torch-molecule)**: Only supports unconditional generation
+- **DiGress (external guidance)**: Supports conditional via property regressor + classifier guidance
 - **GraphDIT**: Supports both unconditional and conditional (multi-property) generation
 - Data must be pre-split into `data/data_bbab/`, `data/data_fbab/`, `data/data_jbcd/` folders

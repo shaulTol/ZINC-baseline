@@ -32,7 +32,8 @@ def load_data(tranche: str, data_dir: Path) -> dict:
         return pickle.load(f)
 
 
-def train_unconditional(data: dict, output_dir: Path, **kwargs):
+def train_unconditional(data: dict, output_dir: Path, checkpoint_dir: Path = None,
+                        checkpoint_freq: int = 100, resume_from: str = None, **kwargs):
     """Train GraphDIT for unconditional generation."""
     
     print(f"\nInitializing GraphDIT for unconditional generation...")
@@ -40,6 +41,11 @@ def train_unconditional(data: dict, output_dir: Path, **kwargs):
     print(f"  num_layer: {kwargs.get('num_layer', 12)}")
     print(f"  epochs: {kwargs.get('epochs', 2000)}")
     print(f"  batch_size: {kwargs.get('batch_size', 16)}")
+    if checkpoint_dir:
+        print(f"  checkpoint_dir: {checkpoint_dir}")
+        print(f"  checkpoint_freq: {checkpoint_freq}")
+    if resume_from:
+        print(f"  resume_from: {resume_from}")
     
     model = GraphDITMolecularGenerator(
         # Model architecture (matched to GRASSY-DiT)
@@ -67,6 +73,9 @@ def train_unconditional(data: dict, output_dir: Path, **kwargs):
     model.fit(
         X_train=data["X_train"],
         y_train=None,
+        checkpoint_dir=str(checkpoint_dir) if checkpoint_dir else None,
+        checkpoint_freq=checkpoint_freq,
+        resume_from=resume_from,
     )
     
     # Save model
@@ -77,7 +86,8 @@ def train_unconditional(data: dict, output_dir: Path, **kwargs):
     return model
 
 
-def train_conditional(data: dict, output_dir: Path, **kwargs):
+def train_conditional(data: dict, output_dir: Path, checkpoint_dir: Path = None,
+                      checkpoint_freq: int = 100, resume_from: str = None, **kwargs):
     """Train GraphDIT for multi-property conditional generation."""
     
     num_properties = len(data["property_names"])
@@ -88,6 +98,11 @@ def train_conditional(data: dict, output_dir: Path, **kwargs):
     print(f"  num_layer: {kwargs.get('num_layer', 12)}")
     print(f"  epochs: {kwargs.get('epochs', 2000)}")
     print(f"  batch_size: {kwargs.get('batch_size', 16)}")
+    if checkpoint_dir:
+        print(f"  checkpoint_dir: {checkpoint_dir}")
+        print(f"  checkpoint_freq: {checkpoint_freq}")
+    if resume_from:
+        print(f"  resume_from: {resume_from}")
     
     # All properties are regression tasks
     task_type = ["regression"] * num_properties
@@ -126,6 +141,9 @@ def train_conditional(data: dict, output_dir: Path, **kwargs):
     model.fit(
         X_train=data["X_train"],
         y_train=y_train_normalized,
+        checkpoint_dir=str(checkpoint_dir) if checkpoint_dir else None,
+        checkpoint_freq=checkpoint_freq,
+        resume_from=resume_from,
     )
     
     # Save model
@@ -158,7 +176,7 @@ def main():
                         help="Directory containing prepared data")
     parser.add_argument("--output_dir", type=str,
                         default="experiments/zinc_baselines/checkpoints",
-                        help="Directory to save checkpoints")
+                        help="Directory to save final checkpoints")
     # Model hyperparameters (matched to GRASSY-DiT for fair comparison)
     parser.add_argument("--hidden_size", type=int, default=256)
     parser.add_argument("--num_layer", type=int, default=12)
@@ -173,6 +191,13 @@ def main():
                         help="Dropout rate for condition embedding (classifier-free guidance)")
     parser.add_argument("--guide_scale", type=float, default=2.0,
                         help="Guidance scale for conditional generation")
+    # Checkpoint options
+    parser.add_argument("--checkpoint_dir", type=str, default=None,
+                        help="Directory to save intermediate training checkpoints (optional)")
+    parser.add_argument("--checkpoint_freq", type=int, default=100,
+                        help="Save checkpoint every N epochs (default: 100)")
+    parser.add_argument("--resume_from", type=str, default=None,
+                        help="Path to training checkpoint to resume from (optional)")
     
     args = parser.parse_args()
     
@@ -212,10 +237,30 @@ def main():
         "guide_scale": args.guide_scale,
     }
     
+    # Handle checkpoint directory
+    checkpoint_dir = None
+    if args.checkpoint_dir is not None:
+        if not Path(args.checkpoint_dir).is_absolute():
+            checkpoint_dir = PROJECT_ROOT / args.checkpoint_dir
+        else:
+            checkpoint_dir = Path(args.checkpoint_dir)
+    
     if args.mode == "unconditional":
-        train_unconditional(data, output_dir, **kwargs)
+        train_unconditional(
+            data, output_dir,
+            checkpoint_dir=checkpoint_dir,
+            checkpoint_freq=args.checkpoint_freq,
+            resume_from=args.resume_from,
+            **kwargs
+        )
     else:
-        train_conditional(data, output_dir, **kwargs)
+        train_conditional(
+            data, output_dir,
+            checkpoint_dir=checkpoint_dir,
+            checkpoint_freq=args.checkpoint_freq,
+            resume_from=args.resume_from,
+            **kwargs
+        )
     
     print(f"\n{'='*60}")
     print("Training complete!")
