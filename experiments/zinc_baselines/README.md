@@ -67,10 +67,7 @@ Matched to GRASSY-DiT for fair comparison:
 
 For conditional generation (GraphDIT only):
 - `qed` - Quantitative Estimate of Drug-likeness
-- `HeavyAtomMolWt` - Heavy Atom Molecular Weight
-- `MolWt` - Molecular Weight
-- `TPSA` - Topological Polar Surface Area
-- `MolLogP` - Partition Coefficient
+- `MolLogP` - Partition Coefficient (LogP)
 - `num_atoms` - Number of Heavy Atoms
 
 ## Output

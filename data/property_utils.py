@@ -59,12 +59,12 @@ def compute_num_atoms(mol):
 
 PROPERTIES_TO_COMPUTE = [
     'qed',
-    'HeavyAtomMolWt',
-    'MolWt',
-    'TPSA',
+    # 'HeavyAtomMolWt',
+    # 'MolWt',
+    # 'TPSA',
     'MolLogP',
     'num_atoms'
-    #BELOW PROPERTIES ARE NOT CONSIDERED FOR MOSES
+    # BELOW PROPERTIES ARE NOT CONSIDERED
     # 'SAS',
     # 'BalabanJ',
     # 'BertzCT',
