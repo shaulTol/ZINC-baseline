@@ -1,0 +1,4 @@
+# ZINC dataset configuration
+name: zinc
+datadir: data
+tranche: BBAB  # Can be BBAB, FBAB, or JBCD

@@ -1,0 +1,34 @@
+# @package _global_
+# Guidance sampling config for ZINC
+
+general:
+    name: 'zinc_guidance'
+    gpus: 1
+    wandb: 'disabled'
+    sample_every_val: 1
+    samples_to_generate: 1000
+    final_model_samples_to_generate: 1000
+    final_model_chains_to_save: 0
+    samples_to_save: 10
+    chains_to_save: 0
+    number_chain_steps: 10
+    guidance_target: 'qed'  # 'qed', 'logp', 'num_atoms'
+    trained_regressor_path: checkpoints/zinc_regressor/last.ckpt
+    test_only: checkpoints/zinc_unconditional/last.ckpt
+
+train:
+    batch_size: 64
+    save_model: False
+
+model:
+    n_layers: 6
+    extra_features: null
+
+guidance:
+    lambda_guidance: 100.0  # Guidance strength
+    n_experiments: 10
+
+dataset:
+    name: zinc
+    datadir: data
+    tranche: BBAB

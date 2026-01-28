@@ -1,0 +1,41 @@
+# @package _global_
+# Training config for ZINC property regressor
+
+general:
+    name: 'zinc_regressor'
+    gpus: 1
+    wandb: 'disabled'
+    check_val_every_n_epochs: 5
+    log_every_steps: 50
+    number_chain_steps: 10
+    guidance_target: 'all'  # 'qed', 'logp', 'num_atoms', or 'all'
+    resume: null
+
+train:
+    n_epochs: 500
+    batch_size: 64
+    lr: 1e-4
+    clip_grad: null
+    save_model: True
+
+model:
+    type: 'discrete'
+    n_layers: 6
+    hidden_mlp_dims:
+        X: 256
+        E: 128
+        y: 128
+    hidden_dims:
+        dx: 256
+        de: 64
+        dy: 64
+        n_head: 8
+        dim_ffn: 256
+    diffusion_steps: 500
+    diffusion_noise_schedule: 'cosine'
+    extra_features: null
+
+dataset:
+    name: zinc
+    datadir: data
+    tranche: BBAB
