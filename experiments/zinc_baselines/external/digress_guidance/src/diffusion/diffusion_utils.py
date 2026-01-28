@@ -244,7 +244,9 @@ def sample_discrete_features(probX, probE, node_mask):
     probX = probX.reshape(probX.size(0) * probX.size(1), -1)       # (bs * n, dx_out)
     # assert (abs(probX.sum(dim=-1) - 1) < 1e-4).all()
 
-    # Sample X
+    # Sample X - clamp probabilities to avoid numerical issues
+    probX = probX.clamp(min=1e-8)
+    probX = probX / probX.sum(dim=-1, keepdim=True)
     X_t = probX.multinomial(1)                                  # (bs * n, 1)
     X_t = X_t.reshape(node_mask.size(0), node_mask.size(1))     # (bs, n)
 
@@ -259,7 +261,9 @@ def sample_discrete_features(probX, probE, node_mask):
 
     probE = probE.reshape(probE.size(0) * probE.size(1) * probE.size(2), -1)    # (bs * n * n, de_out)
 
-    # Sample E
+    # Sample E - clamp probabilities to avoid numerical issues
+    probE = probE.clamp(min=1e-8)
+    probE = probE / probE.sum(dim=-1, keepdim=True)
     E_t = probE.multinomial(1).reshape(node_mask.size(0), node_mask.size(1), node_mask.size(1))   # (bs, n, n)
     E_t = torch.triu(E_t, diagonal=1)
     E_t = (E_t + torch.transpose(E_t, 1, 2))
